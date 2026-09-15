@@ -1,0 +1,4 @@
+# 插件 Host 条目：由 DSH bundle loader 加载 index.js。
+- insert:
+    - id: fingerprint-signature
+      name: dsh-fingerprint-signature

@@ -1,5 +1,6 @@
 # 依赖
 node_modules/
+.pnpm-store/
 
 # 构建产物（由 npm run build:client 从 src/client/ 生成）
 client.js
