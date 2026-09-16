@@ -2,6 +2,8 @@
 
 Human verification gate for DeepSeek Harness (DSH). A native helper asks the operating system authenticator (Windows Hello, Touch ID, or the platform's available user-verification method) before a protected AI tool continues.
 
+> This is the lightweight, earlier experiment in human confirmation. For cryptographically binding authorization to the exact action an agent is about to execute, see [dsh-human-intent](https://github.com/guhanfei-ai/dsh-human-intent).
+
 ## MVP scope
 
 - Host: `index.js`, DSH tools/settings/web-server APIs.
@@ -27,7 +29,7 @@ For local DSH testing:
 ```bash
 npm install
 npm run build:client
-dsh plugin --profile web add link:/Users/ttpai/tayGit/dsh-fingerprint-signature
+dsh plugin --profile web add link:/absolute/path/to/dsh-fingerprint-signature
 ```
 
 Restart the DSH profile after linking. The “指纹签名” settings item is registered by the Client module; a window refresh alone does not reload it.
