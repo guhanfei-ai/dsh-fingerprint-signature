@@ -6,6 +6,7 @@
   "main": "index.js",
   "scripts": {
     "build:client": "node scripts/build-client.mjs",
+    "build:native": "node scripts/build-native.mjs",
     "check": "npm run build:client && node --check index.js && node --check client.js && node --check scripts/build-client.mjs",
     "test": "node --test",
     "verify": "npm run check && npm test",
@@ -15,9 +16,13 @@
     "index.js",
     "client.js",
     "cordis.patch.yml",
+    "native/macos",
+    "native/windows",
+    "native/bin/dsh-fingerprint-auth",
+    "native/bin/dsh-fingerprint-auth.exe",
+    "scripts/build-native.mjs",
     "README.md",
-    "README.zh-CN.md",
-    "_docs"
+    "README.zh-CN.md"
   ],
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.0"
@@ -44,7 +49,7 @@
   },
   "engines": { "node": ">=20.11" },
   "license": "MIT",
-  "keywords": ["deepseek", "harness", "dsh", "dsh-plugin", "human-approval", "webauthn"],
+  "keywords": ["deepseek", "harness", "dsh", "dsh-plugin", "human-approval", "platform-authenticator"],
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",

@@ -1,0 +1,4 @@
+native/bin/.module-cache/
+test/
+native/windows/bin/
+native/windows/obj/

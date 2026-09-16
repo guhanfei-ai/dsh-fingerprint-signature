@@ -6,12 +6,12 @@ window.__ModuleLoader__.load({
     var module = { exports: {} };
     var exports = module.exports;
     const React = require("react");
-    const { createElement: h, Fragment, useEffect, useMemo, useState } = React;
+    const { createElement: h, useEffect, useState } = React;
 
     const API = "/fingerprint-signature/api";
     const emptyConfig = {
-      zhName: "", enName: "", identityId: "", bindingUuid: "", signatureEnabled: true,
-      credentialId: "", rpId: "", customVariables: [], protectedTools: [],
+      zhName: "", enName: "", identityId: "", bindingUuid: "", signatureEnabled: false,
+      customVariables: [], protectedTools: [],
     };
 
     const styles = {
@@ -33,6 +33,8 @@ window.__ModuleLoader__.load({
       dot: { width: "7px", height: "7px", borderRadius: "50%", background: "var(--dsw-alias-state-positive-primary, #2a9d68)" },
       variableHead: { display: "grid", gridTemplateColumns: "1fr 1.4fr 28px", gap: "6px", color: "var(--dsw-alias-label-tertiary)", fontSize: "11px" },
       variableRow: { display: "grid", gridTemplateColumns: "1fr 1.4fr 28px", gap: "6px", alignItems: "center" },
+      subgroup: { display: "flex", flexDirection: "column", gap: "8px" },
+      divider: { border: 0, borderTop: "1px solid var(--dsw-alias-border-l2)", margin: "4px 0 0", width: "100%" },
       error: { margin: 0, color: "var(--dsw-alias-label-error)", fontSize: "12px", lineHeight: 1.5 },
       success: { margin: 0, color: "var(--dsw-alias-state-positive-primary, #2a9d68)", fontSize: "12px" },
     };
@@ -46,51 +48,6 @@ window.__ModuleLoader__.load({
       const parsed = await response.json().catch(() => null);
       if (!response.ok || !parsed || parsed.ok !== true) throw new Error(parsed?.error || `HTTP ${response.status}`);
       return parsed;
-    }
-
-    function base64urlToBytes(value) {
-      const text = String(value || "");
-      const padded = text.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((text.length + 3) % 4);
-      const binary = atob(padded);
-      return Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
-    }
-
-    function textBytes(value) { return new TextEncoder().encode(String(value || "")); }
-    function bytesToBase64url(value) {
-      const bytes = new Uint8Array(value);
-      let binary = "";
-      for (const byte of bytes) binary += String.fromCharCode(byte);
-      return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-    }
-
-    async function registerAuthenticator() {
-      if (!navigator.credentials?.create) throw new Error("当前 DSH 页面不支持 WebAuthn");
-      const { options } = await request("/register/options", "POST", {});
-      const credential = await navigator.credentials.create({ publicKey: {
-        challenge: textBytes(options.challenge),
-        rp: { name: "DeepSeek Harness" },
-        user: { id: textBytes(options.userId), name: options.userName || "dsh-user", displayName: options.userName || "dsh-user" },
-        pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
-        authenticatorSelection: { userVerification: "required" },
-        timeout: 120000,
-      } });
-      if (!credential) throw new Error("未完成验证器绑定");
-      await request("/binding", "POST", { credentialId: bytesToBase64url(credential.rawId), rpId: options.rpId || location.hostname });
-    }
-
-    async function authorize(requestId) {
-      if (!navigator.credentials?.get) throw new Error("当前 DSH 页面不支持 WebAuthn");
-      const { options } = await request("/authorize/options", "POST", { requestId });
-      if (!options.credentialId) throw new Error("尚未设置本机验证，请先完成设置");
-      const credential = await navigator.credentials.get({ publicKey: {
-        challenge: textBytes(options.challenge),
-        rpId: options.rpId || location.hostname,
-        allowCredentials: [{ type: "public-key", id: base64urlToBytes(options.credentialId) }],
-        userVerification: "required",
-        timeout: 120000,
-      } });
-      if (!credential) throw new Error("指纹签名未完成");
-      await request("/verify", "POST", { requestId, verified: true, credentialId: bytesToBase64url(credential.rawId) });
     }
 
     function InfoHint({ label, text }) {
@@ -151,9 +108,9 @@ window.__ModuleLoader__.load({
     function Variables({ value, onChange, disabled }) {
       const rows = Array.isArray(value) ? value : [];
       function update(index, patch) { onChange(rows.map((row, i) => i === index ? { ...row, ...patch } : row)); }
-      return h("div", { style: styles.group },
+      return h("div", { style: styles.subgroup },
         h("strong", null, "自定义变量"),
-        h("p", { style: styles.muted }, "指纹签名成功后，这些变量会随结果进入 AI 上下文。"),
+        h("p", { style: styles.muted }, "Key 不能为空且不能重复；密码、Token、私钥等敏感值不要放在这里。"),
         h("div", { style: styles.variableHead }, h("span", null, "Key"), h("span", null, "Value"), h("span", null)),
         ...rows.map((row, index) => h("div", { style: styles.variableRow, key: row.id || index },
           h("input", { style: styles.input, value: row.key || "", disabled, onChange: (event) => update(index, { key: event.target.value }) }),
@@ -167,35 +124,80 @@ window.__ModuleLoader__.load({
     function SettingsPanel() {
       const [config, setConfig] = useState(null);
       const [error, setError] = useState("");
-      const [notice, setNotice] = useState("");
-      const [saving, setSaving] = useState(false);
+      const [notice, setNotice] = useState(null);
+      const [busy, setBusy] = useState("");
       async function reload() { try { setError(""); const state = await request("/state"); setConfig({ ...emptyConfig, ...state.config }); } catch (err) { setError(err.message); } }
       useEffect(() => { reload(); }, []);
       if (!config) return h("div", { style: styles.root }, h("p", { style: styles.muted }, error || "正在读取设置…"));
-      async function save() { setSaving(true); setError(""); setNotice(""); try { const result = await request("/settings", "POST", config); setConfig(result.config); setNotice("变量已保存"); } catch (err) { setError(err.message); } finally { setSaving(false); } }
-      async function bind() { setSaving(true); setError(""); try { await registerAuthenticator(); await reload(); setNotice("本机验证已设置"); } catch (err) { setError(err.message); } finally { setSaving(false); } }
-      const disabled = saving;
+      function outcomeNotice(res) {
+        if (res.status === "disabled") return { text: "指纹功能未激活：请先激活指纹功能，再保存变量。", tone: "info" };
+        if (res.status === "cancelled") return { text: "已在系统验证窗口中取消：未保存任何改动。", tone: "info" };
+        if (res.status === "unavailable") return { text: "系统验证器不可用：请先在本机构建原生 helper（npm run build:native），并确认系统已设置指纹或密码。", tone: "info" };
+        if (res.status === "timeout" || res.status === "expired") return { text: "验证超时：未保存任何改动。", tone: "info" };
+        return { text: `验证失败：未保存任何改动。${res.error ? `（${res.error}）` : ""}`, tone: "info" };
+      }
+      async function save() {
+        if (!config.signatureEnabled) { setNotice({ text: "指纹功能未激活：请先激活指纹功能，再保存变量。", tone: "info" }); return; }
+        setBusy("save"); setError(""); setNotice({ text: "已唤起系统验证，请在系统弹窗中完成 Touch ID / Windows Hello 验证…", tone: "info" });
+        try {
+          const result = await request("/settings", "POST", config);
+          setConfig({ ...emptyConfig, ...result.config });
+          setNotice(result.status === "verified"
+            ? { text: "系统验证通过：签名变量已保存。", tone: "success" }
+            : outcomeNotice(result));
+        } catch (err) { setError(err.message); setNotice(null); } finally { setBusy(""); }
+      }
+      async function activate() {
+        setBusy("activate"); setError(""); setNotice({ text: "已唤起系统验证，请在系统弹窗中完成 Touch ID / Windows Hello 验证…", tone: "info" });
+        try {
+          const result = await request("/activate", "POST", config);
+          setConfig({ ...emptyConfig, ...result.config });
+          setNotice(result.config.signatureEnabled
+            ? { text: "系统验证通过：指纹功能已激活，当前签名变量已一并保存。", tone: "success" }
+            : outcomeNotice(result));
+        } catch (err) { setError(err.message); setNotice(null); } finally { setBusy(""); }
+      }
+      async function disable() {
+        if (!config.signatureEnabled) { setNotice({ text: "指纹功能当前未激活。", tone: "info" }); return; }
+        setBusy("deactivate"); setError(""); setNotice({ text: "已唤起系统验证，请在系统弹窗中完成 Touch ID / Windows Hello 验证…", tone: "info" });
+        try {
+          const result = await request("/deactivate", "POST");
+          setConfig({ ...emptyConfig, ...result.config });
+          setNotice(result.status === "noop"
+            ? { text: "指纹功能在此前已被禁用，本次未弹出验证。", tone: "info" }
+            : result.config.signatureEnabled === false
+              ? { text: "系统验证通过：指纹功能已禁用，签名变量已保留。", tone: "success" }
+              : outcomeNotice(result));
+        } catch (err) { setError(err.message); setNotice(null); } finally { setBusy(""); }
+      }
+      const disabled = busy !== "";
       return h("div", { style: styles.root },
         h("h2", { style: styles.title }, "指纹签名"),
         h("p", { style: styles.muted }, "只确认系统用户验证是否成功，不判断设备上登记的是谁。"),
         h("div", { style: styles.group },
-          h("div", { style: styles.badge }, h("span", { style: { ...styles.dot, background: config.signatureEnabled ? "var(--dsw-alias-state-positive-primary, #2a9d68)" : "var(--dsw-alias-label-tertiary)" } }), config.signatureEnabled ? "签名已激活" : "签名已禁用"),
+          h("strong", null, "指纹功能"),
+          h("p", { style: styles.muted }, "激活后，AI 在关键步骤调用 dsh_fingerprint_signature 时会弹出系统验证，验证通过才会向 AI 注入签名变量。激活与禁用都需要本人完成一次系统验证；激活通过时会一并保存当前签名变量。"),
+          h("div", { style: styles.badge }, h("span", { style: { ...styles.dot, background: config.signatureEnabled ? "var(--dsw-alias-state-positive-primary, #2a9d68)" : "var(--dsw-alias-label-tertiary)" } }), config.signatureEnabled ? "指纹功能已激活" : "指纹功能未激活"),
+          h("div", { style: styles.row },
+            h("button", { type: "button", style: { ...styles.button, ...styles.primary }, disabled, onClick: activate }, busy === "activate" ? "验证中…" : "指纹功能激活"),
+            h("button", { type: "button", style: styles.button, disabled, onClick: disable }, busy === "deactivate" ? "验证中…" : "指纹功能禁用"),
+          ),
+        ),
+        h("div", { style: styles.group },
+          h("strong", null, "签名变量"),
+          h("p", { style: styles.muted }, "指纹验证通过后，这些变量会随结果一起进入 AI 上下文：前四项是插件自带变量，下方可添加自定义变量。每次保存变量都需要完成一次系统指纹验证。"),
           field("中文姓名", config.zhName, (value) => setConfig({ ...config, zhName: value }), disabled, "用于在验证成功后标识你，填写常用中文姓名即可。"),
           field("英文姓名", config.enName, (value) => setConfig({ ...config, enName: value }), disabled, "用于需要英文显示的场景，填写英文姓名即可；没有可留空。"),
           field("身份 ID", config.identityId, (value) => setConfig({ ...config, identityId: value }), disabled, "这是自定义的身份 ID 标识，可以是工号、手机号，或者其它公司或组织内互相认可的 ID 字符串。"),
           h("div", { style: styles.label },
-            h("span", { style: styles.fieldHead }, h("label", { htmlFor: "dsh-fingerprint-signature-field-uuid" }, "UUID"), h(InfoHint, { label: "UUID", text: "这是系统自动生成的唯一绑定标识，用来区分这次指纹签名配置；一般不需要手动修改。" })),
-            h("input", { id: "dsh-fingerprint-signature-field-uuid", style: { ...styles.input, opacity: .7 }, value: config.bindingUuid || "首次保存时生成", readOnly: true, "aria-label": "UUID" }),
+            h("span", { style: styles.fieldHead }, h("label", { htmlFor: "dsh-fingerprint-signature-field-uuid" }, "UUID"), h(InfoHint, { label: "UUID", text: "首次激活并通过系统验证时自动生成的唯一绑定标识，用来区分这份指纹签名配置；不需要手动修改。" })),
+            h("input", { id: "dsh-fingerprint-signature-field-uuid", style: { ...styles.input, opacity: .7 }, value: config.bindingUuid || "首次激活时生成", readOnly: true, "aria-label": "UUID" }),
           ),
-          h("div", { style: styles.row },
-            h("button", { type: "button", style: { ...styles.button, ...styles.primary }, disabled, onClick: () => setConfig({ ...config, signatureEnabled: true }) }, "签名激活"),
-            h("button", { type: "button", style: styles.button, disabled, onClick: () => setConfig({ ...config, signatureEnabled: false }) }, "签名禁用"),
-            h("button", { type: "button", style: styles.button, title: "使用本机的指纹、面容、PIN 或其它系统验证方式完成设置。", disabled, onClick: bind }, config.credentialId ? "重新设置本机验证" : "设置本机验证"),
-          ),
+          h("hr", { style: styles.divider }),
+          h(Variables, { value: config.customVariables, onChange: (customVariables) => setConfig({ ...config, customVariables }), disabled }),
+          h("button", { type: "button", style: { ...styles.button, ...styles.primary }, disabled, onClick: save }, busy === "save" ? "验证中…" : "保存变量（需指纹验证）"),
         ),
-        h(Variables, { value: config.customVariables, onChange: (customVariables) => setConfig({ ...config, customVariables }), disabled }),
-        h("button", { type: "button", style: { ...styles.button, ...styles.primary }, disabled, onClick: save }, saving ? "保存中…" : "保存变量"),
-        notice ? h("p", { style: styles.success }, notice) : null,
+        notice ? h("p", { style: notice.tone === "success" ? styles.success : styles.muted }, notice.text) : null,
         error ? h("p", { style: styles.error }, error) : null,
       );
     }
@@ -212,12 +214,11 @@ window.__ModuleLoader__.load({
         return () => { alive = false; events.close(); };
       }, []);
       const current = state.pending?.[0];
-      async function verify() { if (!current) return; setError(""); try { await authorize(current.requestId); } catch (err) { setError(err.message); await request("/cancel", "POST", { requestId: current.requestId }).catch(() => {}); } }
       async function cancel() { if (current) await request("/cancel", "POST", { requestId: current.requestId }).catch(() => {}); }
       return h("div", { style: styles.root, "data-dsh-fingerprint-signature": "panel" },
         h("h2", { style: styles.title }, "指纹签名"),
-        h("p", { style: styles.muted }, state.config?.signatureEnabled === false ? "签名已禁用" : "等待 AI 在关键步骤发起确认。"),
-        current ? h("div", { style: styles.group }, h("strong", null, "待确认请求"), h("p", { style: styles.muted }, current.reason || "AI 请求继续执行关键操作"), h("div", { style: styles.row }, h("button", { type: "button", style: { ...styles.button, ...styles.primary }, onClick: verify }, "立即确认"), h("button", { type: "button", style: styles.button, onClick: cancel }, "取消"))) : h("p", { style: styles.muted }, "当前没有待处理的请求。"),
+        h("p", { style: styles.muted }, state.config?.signatureEnabled === false ? "指纹功能未开启：AI 调用工具会得到“指纹功能未开启，工具调用无效，无法读取签名变量”。" : "等待 AI 在关键步骤发起确认。"),
+        current ? h("div", { style: styles.group }, h("strong", null, "待确认请求"), h("p", { style: styles.muted }, current.reason || "AI 请求继续执行关键操作"), h("p", { style: styles.muted }, "系统验证器已由 DSH Host 弹出，请完成验证；如需停止可以取消。"), h("div", { style: styles.row }, h("button", { type: "button", style: styles.button, onClick: cancel }, "取消"))) : h("p", { style: styles.muted }, "当前没有待处理的请求。"),
         error ? h("p", { style: styles.error }, error) : null,
       );
     }
