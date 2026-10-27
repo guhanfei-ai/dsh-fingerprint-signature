@@ -1,5 +1,8 @@
 # dsh-fingerprint-signature
 
+> [!NOTE]
+> 🧪 **实验阶段。** 这是 [古寒飞AI](https://github.com/guhanfei-ai) 实验室里的早期原型：想法是认真的，代码还是第一版。目前没有稳定版本，接口、数据格式和行为都可能随时调整，不建议用于生产环境。欢迎提 issue 聊想法。
+
 面向 DeepSeek Harness（DSH）的指纹签名门。关键步骤调用插件后，DSH Host 直接调用操作系统验证器：Windows Hello、Touch ID，或当前平台提供的其它用户验证方式。
 
 > 这是轻量的早期人类确认实验。若需要把授权密码学绑定到 Agent 即将执行的具体动作，请看 [dsh-human-intent](https://github.com/guhanfei-ai/dsh-human-intent)。

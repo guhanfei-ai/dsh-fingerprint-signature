@@ -1,5 +1,8 @@
 # dsh-fingerprint-signature
 
+> [!NOTE]
+> 🧪 **Experimental.** An early prototype from the [guhanfei-ai](https://github.com/guhanfei-ai) lab: the idea is serious, the code is a first cut. There is no stable release yet; APIs, data formats and behavior may change without notice, so it is not recommended for production. Ideas and issues are welcome.
+
 Human verification gate for DeepSeek Harness (DSH). A native helper asks the operating system authenticator (Windows Hello, Touch ID, or the platform's available user-verification method) before a protected AI tool continues.
 
 > This is the lightweight, earlier experiment in human confirmation. For cryptographically binding authorization to the exact action an agent is about to execute, see [dsh-human-intent](https://github.com/guhanfei-ai/dsh-human-intent).
